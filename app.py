@@ -6,7 +6,7 @@ st.set_page_config(page_title="Honda Accessories Matcher", layout="centered")
 
 @st.cache_data
 def load_master():
-    return pd.read_excel("master_accessories_autoparsed_WITH_DETAILS.xlsx")
+    return pd.read_excel("Master_Accessories_Merged.xlsx.xlsx")
 
 def merge_files(df_en: pd.DataFrame, df_master: pd.DataFrame) -> pd.DataFrame:
     # Seleziono solo le colonne che mi servono dal master
