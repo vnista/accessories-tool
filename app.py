@@ -11,14 +11,15 @@ def load_master():
     return pd.read_excel("Master_Accessories_Merged.xlsx")
 
 
-# === 2. Logica di merge con sovrascrittura colonne EN ===
+# === 2. Logica di merge con sovrascrittura colonne EN (incl. GROUP) ===
 def merge_files_overwrite(df_en: pd.DataFrame, df_master: pd.DataFrame) -> pd.DataFrame:
-    # Seleziono solo le colonne utili dal master
-    master_small = df_master[["PARTNUMBER", "DESCRIPTION", "REMARK", "MASTER IMAGE"]].copy()
+    # Seleziono le colonne utili dal master, inclusa GROUP
+    master_small = df_master[["PARTNUMBER", "DESCRIPTION", "REMARK", "GROUP", "MASTER IMAGE"]].copy()
     master_small = master_small.rename(
         columns={
             "DESCRIPTION": "DESCRIPTION_IT",
             "REMARK": "REMARK_IT",
+            "GROUP": "GROUP_IT",
             "MASTER IMAGE": "MASTER_IMAGE_IT",
         }
     )
@@ -31,6 +32,8 @@ def merge_files_overwrite(df_en: pd.DataFrame, df_master: pd.DataFrame) -> pd.Da
         merged["DESCRIPTION"] = merged["DESCRIPTION_IT"].fillna(merged["DESCRIPTION"])
     if "REMARK" in merged.columns:
         merged["REMARK"] = merged["REMARK_IT"].fillna(merged["REMARK"])
+    if "GROUP" in merged.columns:
+        merged["GROUP"] = merged["GROUP_IT"].fillna(merged["GROUP"])
     if "MASTER IMAGE" in merged.columns:
         merged["MASTER IMAGE"] = merged["MASTER_IMAGE_IT"].fillna(merged["MASTER IMAGE"])
 
@@ -39,11 +42,9 @@ def merge_files_overwrite(df_en: pd.DataFrame, df_master: pd.DataFrame) -> pd.Da
 
     # Colonne finali richieste
     cols_finali = ["PARTNUMBER", "DESCRIPTION", "REMARK", "GROUP", "MASTER IMAGE", "NOT_FOUND"]
-    # Tengo solo quelle che esistono davvero (per evitare errori se qualcosa manca)
     cols_finali = [c for c in cols_finali if c in merged.columns]
 
     result = merged[cols_finali]
-
     return result
 
 
@@ -62,8 +63,10 @@ def main():
     st.markdown(
         "Carica il **file master accessori in inglese**.\n\n"
         "- Il file ha intestazioni a partire dalla **riga 10** (le prime 9 righe sono da ignorare).\n"
-        "- L’app userà `Master_Accessories_Merged.xlsx` per sostituire i valori in italiano.\n"
-        "- L’output conterrà solo: `PARTNUMBER`, `DESCRIPTION`, `REMARK`, `GROUP`, `MASTER IMAGE`."
+        "- L’app userà `Master_Accessories_Merged.xlsx` per sostituire in italiano "
+        "`DESCRIPTION`, `REMARK`, `GROUP` e `MASTER IMAGE`.\n"
+        "- L’output conterrà solo: `PARTNUMBER`, `DESCRIPTION`, `REMARK`, `GROUP`, `MASTER IMAGE` "
+        "più una colonna di servizio `NOT_FOUND`."
     )
 
     # Carico il master IT
