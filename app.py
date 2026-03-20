@@ -23,7 +23,7 @@ def merge_files_overwrite(df_en: pd.DataFrame, df_master: pd.DataFrame) -> pd.Da
         }
     )
 
-    # Merge LEFT: mantengo tutte le righe e la struttura del file EN
+    # Merge LEFT: mantengo tutte le righe del file EN
     merged = df_en.merge(master_small, on="PARTNUMBER", how="left")
 
     # Sovrascrivo le colonne del file EN con l’italiano dove disponibile
@@ -34,13 +34,15 @@ def merge_files_overwrite(df_en: pd.DataFrame, df_master: pd.DataFrame) -> pd.Da
     if "MASTER IMAGE" in merged.columns:
         merged["MASTER IMAGE"] = merged["MASTER_IMAGE_IT"].fillna(merged["MASTER IMAGE"])
 
-    # Flag per vedere quali codici non sono presenti nel master IT
+    # Flag per capire quali codici non sono nel master
     merged["NOT_FOUND"] = merged["DESCRIPTION_IT"].isna()
 
-    # Mantengo solo le colonne originali + NOT_FOUND
-    cols_originali = list(df_en.columns)
-    cols_output = cols_originali + ["NOT_FOUND"]
-    result = merged[cols_output]
+    # Colonne finali richieste
+    cols_finali = ["PARTNUMBER", "DESCRIPTION", "REMARK", "GROUP", "MASTER IMAGE", "NOT_FOUND"]
+    # Tengo solo quelle che esistono davvero (per evitare errori se qualcosa manca)
+    cols_finali = [c for c in cols_finali if c in merged.columns]
+
+    result = merged[cols_finali]
 
     return result
 
@@ -58,13 +60,13 @@ def main():
     st.title("Honda Accessories – Conversione EN → IT")
 
     st.markdown(
-        "Carica il **file master accessori in inglese** (Excel con colonna `PARTNUMBER`).\n\n"
-        "L’app userà il database interno in italiano (`Master_Accessories_Merged.xlsx`) "
-        "per **sostituire le descrizioni, i remark e le eventuali master image**, "
-        "mantenendo **esattamente la stessa struttura** del file originale."
+        "Carica il **file master accessori in inglese**.\n\n"
+        "- Il file ha intestazioni a partire dalla **riga 10** (le prime 9 righe sono da ignorare).\n"
+        "- L’app userà `Master_Accessories_Merged.xlsx` per sostituire i valori in italiano.\n"
+        "- L’output conterrà solo: `PARTNUMBER`, `DESCRIPTION`, `REMARK`, `GROUP`, `MASTER IMAGE`."
     )
 
-    # Carico il master IT una volta sola
+    # Carico il master IT
     try:
         df_master = load_master()
         st.success(f"Database IT caricato: {len(df_master)} righe dal master.")
@@ -85,26 +87,27 @@ def main():
 
     if uploaded_file is not None:
         try:
-            df_en = pd.read_excel(uploaded_file)
+            # header=9 → considera la riga 10 come riga intestazioni (0‑based)
+            df_en = pd.read_excel(uploaded_file, header=9)
         except Exception as e:
             st.error(f"Errore nella lettura del file caricato: {e}")
             return
 
         if "PARTNUMBER" not in df_en.columns:
-            st.error("Il file caricato deve avere una colonna chiamata **'PARTNUMBER'**.")
+            st.error("Il file (a partire dalla riga 10) deve avere una colonna chiamata **'PARTNUMBER'**.")
             return
 
-        st.subheader("Anteprima file caricato")
+        st.subheader("Anteprima file caricato (da riga 10 in poi)")
         st.dataframe(df_en.head())
 
         if st.button("Esegui conversione EN → IT"):
             result = merge_files_overwrite(df_en, df_master)
 
-            st.subheader("Anteprima risultato (solo IT, stessa struttura)")
+            st.subheader("Anteprima risultato (solo colonne richieste)")
             st.dataframe(result.head())
 
             total = len(result)
-            not_found = result["NOT_FOUND"].sum()
+            not_found = result["NOT_FOUND"].sum() if "NOT_FOUND" in result.columns else 0
             st.info(f"Righe totali: {total} – Codici NON trovati nel master IT: {not_found}")
 
             excel_bytes = to_excel_download(result)
