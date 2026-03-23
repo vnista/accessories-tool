@@ -82,25 +82,34 @@ def process_italian_file(df_it: pd.DataFrame, df_master: pd.DataFrame) -> pd.Dat
 def apply_wheel_price(df: pd.DataFrame) -> pd.DataFrame:
     """
     Per tutte le righe dove GROUP == 'CERCHI IN LEGA',
-    moltiplica il valore della colonna 'PRICE INCL.VAT EUR' per 4.
+    moltiplica il valore della colonna del prezzo IVA inclusa per 4.
     """
-    price_col = "PRICE INCL.VAT EUR"
 
-    # Controlla che esistano entrambe le colonne necessarie
-    if "GROUP" not in df.columns or price_col not in df.columns:
-        return df  # niente da fare, restituisce il df invariato
+    # Cerca la colonna prezzo in modo flessibile (case-insensitive, spazi tollerati)
+    price_col = None
+    for col in df.columns:
+        col_clean = str(col).strip().upper()
+        if "PRICE" in col_clean and "INCL" in col_clean and "VAT" in col_clean:
+            price_col = col
+            break
+
+    if price_col is None or "GROUP" not in df.columns:
+        st.warning(
+            f"Colonna prezzo non trovata o colonna GROUP mancante.\n"
+            f"Colonne disponibili nel file: {list(df.columns)}"
+        )
+        return df
 
     # Maschera delle righe CERCHI IN LEGA
     mask = df["GROUP"].astype(str).str.strip().str.upper() == "CERCHI IN LEGA"
 
-    # Converte la colonna in numerico (per sicurezza, ignora errori)
+    # Converte la colonna in numerico
     df[price_col] = pd.to_numeric(df[price_col], errors="coerce")
 
     # Moltiplica x4 solo le righe della maschera
     df.loc[mask, price_col] = df.loc[mask, price_col] * 4
 
     return df
-
 
 # === 3. Utility per creare il file Excel da scaricare ===
 def to_excel_download(df: pd.DataFrame) -> bytes:
