@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 from io import BytesIO
+from openpyxl.styles import PatternFill
+
 
 st.set_page_config(page_title="Honda Accessories – Tool accessori", layout="centered")
 
@@ -40,8 +42,6 @@ def merge_files_overwrite(df_en: pd.DataFrame, df_master: pd.DataFrame) -> pd.Da
     cols_finali = [c for c in cols_finali if c in merged.columns]
 
     result = merged[cols_finali]
-
-    # Applica moltiplicazione x4 per CERCHI IN LEGA
     result = apply_wheel_price(result)
 
     return result
@@ -72,7 +72,6 @@ def process_italian_file(df_it: pd.DataFrame, df_master: pd.DataFrame) -> pd.Dat
         )
         df_it["GROUP"] = df_it["PARTNUMBER"].map(gmap).fillna(df_it["GROUP"])
 
-    # Applica moltiplicazione x4 per CERCHI IN LEGA
     df_it = apply_wheel_price(df_it)
 
     return df_it
@@ -83,9 +82,8 @@ def apply_wheel_price(df: pd.DataFrame) -> pd.DataFrame:
     """
     Per tutte le righe dove GROUP == 'CERCHI IN LEGA',
     moltiplica il valore della colonna del prezzo IVA inclusa per 4.
+    Cerca la colonna prezzo in modo flessibile (case-insensitive).
     """
-
-    # Cerca la colonna prezzo in modo flessibile (case-insensitive, spazi tollerati)
     price_col = None
     for col in df.columns:
         col_clean = str(col).strip().upper()
@@ -100,42 +98,30 @@ def apply_wheel_price(df: pd.DataFrame) -> pd.DataFrame:
         )
         return df
 
-    # Maschera delle righe CERCHI IN LEGA
     mask = df["GROUP"].astype(str).str.strip().str.upper() == "CERCHI IN LEGA"
-
-    # Converte la colonna in numerico
     df[price_col] = pd.to_numeric(df[price_col], errors="coerce")
-
-    # Moltiplica x4 solo le righe della maschera
     df.loc[mask, price_col] = df.loc[mask, price_col] * 4
 
     return df
 
-# === 3. Utility per creare il file Excel da scaricare (con evidenziazione giallo per CERCHI IN LEGA) ===
+
+# === 3. Utility per creare il file Excel con evidenziazione giallo per CERCHI IN LEGA ===
 def to_excel_download(df: pd.DataFrame) -> bytes:
     output = BytesIO()
 
-    # Scrivo prima con openpyxl
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="ACCESSORIES")
 
-        # Recupero il worksheet
         workbook = writer.book
         worksheet = writer.sheets["ACCESSORIES"]
 
-        # Stile giallo
-        from openpyxl.styles import PatternFill
         yellow_fill = PatternFill(
             start_color="FFFF00",
             end_color="FFFF00",
             fill_type="solid"
         )
 
-        # Trovo l'indice della colonna GROUP nel DataFrame
         if "GROUP" in df.columns:
-            group_col_idx = df.columns.get_loc("GROUP")  # 0-based
-            # In Excel le colonne partono da 1, +1 per l'header
-            # Le righe dati partono dalla riga 2 (riga 1 = header)
             for row_idx, group_val in enumerate(df["GROUP"], start=2):
                 if str(group_val).strip().upper() == "CERCHI IN LEGA":
                     for col_idx in range(1, len(df.columns) + 1):
@@ -143,7 +129,19 @@ def to_excel_download(df: pd.DataFrame) -> bytes:
 
     return output.getvalue()
 
-# === 4. App Streamlit ===
+
+# === 4. Genera nome file di output ===
+def build_output_filename(uploaded_filename: str) -> str:
+    """
+    Prende il nome del file originale (es. 'EU_25YM_HR-V_Hybrid_accessories.xlsx')
+    e restituisce lo stesso nome con '_hondatool' aggiunto prima dell'estensione
+    (es. 'EU_25YM_HR-V_Hybrid_accessories_hondatool.xlsx').
+    """
+    base = uploaded_filename.rsplit(".", 1)[0]
+    return f"{base}_hondatool.xlsx"
+
+
+# === 5. App Streamlit ===
 def main():
     st.title("Honda Accessories – Tool accessori")
 
@@ -174,9 +172,9 @@ def main():
             "Carica il **file master accessori in inglese**.\n\n"
             "- Le intestazioni devono essere alla **riga 10**.\n"
             "- L'app sostituirà in italiano `DESCRIPTION`, `REMARK`, `GROUP` e `MASTER IMAGE`.\n"
-            "- Le righe con `GROUP = CERCHI IN LEGA` avranno il prezzo (`PRICE INCL.VAT EUR`) **moltiplicato x4**.\n"
-            "- L'output conterrà solo: `PARTNUMBER`, `DESCRIPTION`, `REMARK`, `GROUP`, `MASTER IMAGE` "
-            "+ colonna di servizio `NOT_FOUND`."
+            "- Le righe con `GROUP = CERCHI IN LEGA` avranno il prezzo (`PRICE INCL.VAT EUR`) "
+            "**moltiplicato x4** ed evidenziate in **giallo**.\n"
+            "- L'output avrà lo stesso nome del file caricato + `_hondatool`."
         )
 
         uploaded_file = st.file_uploader(
@@ -212,17 +210,19 @@ def main():
                 wheels = (
                     result["GROUP"].astype(str).str.strip().str.upper() == "CERCHI IN LEGA"
                 ).sum() if "GROUP" in result.columns else 0
+
                 st.info(
                     f"Righe totali: {total} – "
                     f"Codici NON trovati: {not_found} – "
-                    f"Cerchi in lega (prezzo x4): {wheels}"
+                    f"Cerchi in lega (prezzo x4 + giallo): {wheels}"
                 )
 
                 excel_bytes = to_excel_download(result)
+                output_filename = build_output_filename(uploaded_file.name)
                 st.download_button(
-                    label="Scarica file Excel convertito in italiano",
+                    label=f"Scarica {output_filename}",
                     data=excel_bytes,
-                    file_name="Master_accessories_IT_output.xlsx",
+                    file_name=output_filename,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
 
@@ -236,7 +236,9 @@ def main():
             "- Alla colonna `REMARK` verrà aggiunta la frase "
             "`\"Listino comprensivo di IVA, montaggio escluso\"`.\n"
             "- La colonna `GROUP` verrà riscritta con le voci italiane del database.\n"
-            "- Le righe con `GROUP = CERCHI IN LEGA` avranno il prezzo (`PRICE INCL.VAT EUR`) **moltiplicato x4**."
+            "- Le righe con `GROUP = CERCHI IN LEGA` avranno il prezzo (`PRICE INCL.VAT EUR`) "
+            "**moltiplicato x4** ed evidenziate in **giallo**.\n"
+            "- L'output avrà lo stesso nome del file caricato + `_hondatool`."
         )
 
         uploaded_file_it = st.file_uploader(
@@ -268,13 +270,14 @@ def main():
                 wheels = (
                     result_it["GROUP"].astype(str).str.strip().str.upper() == "CERCHI IN LEGA"
                 ).sum() if "GROUP" in result_it.columns else 0
-                st.info(f"Cerchi in lega trovati (prezzo x4 applicato): {wheels}")
+                st.info(f"Cerchi in lega trovati (prezzo x4 + giallo applicato): {wheels}")
 
                 excel_bytes_it = to_excel_download(result_it)
+                output_filename_it = build_output_filename(uploaded_file_it.name)
                 st.download_button(
-                    label="Scarica file IT aggiornato",
+                    label=f"Scarica {output_filename_it}",
                     data=excel_bytes_it,
-                    file_name="Master_accessories_IT_cleaned.xlsx",
+                    file_name=output_filename_it,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
 
