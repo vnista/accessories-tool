@@ -59,14 +59,17 @@ def process_italian_file(df_it: pd.DataFrame, df_master: pd.DataFrame) -> pd.Dat
 
         df_it["REMARK"] = df_it["REMARK"].apply(add_mandatory)
 
-    # Traduce la colonna GROUP usando il master IT (match per PARTNUMBER)
+    # Traduce GROUP usando il master IT (fix duplicati PARTNUMBER)
     if "GROUP" in df_it.columns and "PARTNUMBER" in df_it.columns:
-        gmap = df_master[["PARTNUMBER", "GROUP"]].dropna().drop_duplicates()
-        gmap = gmap.set_index("PARTNUMBER")["GROUP"]
+        gmap = (
+            df_master[["PARTNUMBER", "GROUP"]]
+            .dropna(subset=["PARTNUMBER"])
+            .drop_duplicates(subset=["PARTNUMBER"], keep="first")  # ← fix chiave
+            .set_index("PARTNUMBER")["GROUP"]
+        )
         df_it["GROUP"] = df_it["PARTNUMBER"].map(gmap).fillna(df_it["GROUP"])
 
     return df_it
-
 
 # === 3. Utility per creare il file Excel da scaricare ===
 def to_excel_download(df: pd.DataFrame) -> bytes:
