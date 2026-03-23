@@ -44,7 +44,7 @@ def merge_files_overwrite(df_en: pd.DataFrame, df_master: pd.DataFrame) -> pd.Da
 
 # === 2b. Funzione pulizia file già in italiano ===
 def process_italian_file(df_it: pd.DataFrame, df_master: pd.DataFrame) -> pd.DataFrame:
-    mandatory = "Listino comprensivo di IVA, montaggio escluso"
+    mandatory = "Listino comprensivo di IVA, montaggio escluso."
 
     # Aggiunge la frase obbligatoria in fondo a ogni REMARK
     if "REMARK" in df_it.columns:
@@ -162,7 +162,7 @@ def main():
             "### Pulizia file IT (REMARK + GROUP)\n"
             "Carica un file **già localizzato in italiano**.\n\n"
             "- Alla colonna `REMARK` verrà aggiunta in fondo la frase obbligatoria: "
-            "`\"Listino comprensivo di IVA, montaggio escluso\"`.\n"
+            "`\"Listino comprensivo di IVA, montaggio escluso.\"`.\n"
             "- La colonna `GROUP` verrà riscritta con le voci italiane del database "
             "(es. `PACKS` → `PACCHETTI`, `INTERIOR` → `INTERNI`, ecc.).\n"
             "- L'output avrà la **stessa struttura** del file caricato, con queste due colonne aggiornate."
