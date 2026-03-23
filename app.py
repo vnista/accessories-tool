@@ -111,13 +111,37 @@ def apply_wheel_price(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
-# === 3. Utility per creare il file Excel da scaricare ===
+# === 3. Utility per creare il file Excel da scaricare (con evidenziazione giallo per CERCHI IN LEGA) ===
 def to_excel_download(df: pd.DataFrame) -> bytes:
     output = BytesIO()
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name="ACCESSORIES")
-    return output.getvalue()
 
+    # Scrivo prima con openpyxl
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="ACCESSORIES")
+
+        # Recupero il worksheet
+        workbook = writer.book
+        worksheet = writer.sheets["ACCESSORIES"]
+
+        # Stile giallo
+        from openpyxl.styles import PatternFill
+        yellow_fill = PatternFill(
+            start_color="FFFF00",
+            end_color="FFFF00",
+            fill_type="solid"
+        )
+
+        # Trovo l'indice della colonna GROUP nel DataFrame
+        if "GROUP" in df.columns:
+            group_col_idx = df.columns.get_loc("GROUP")  # 0-based
+            # In Excel le colonne partono da 1, +1 per l'header
+            # Le righe dati partono dalla riga 2 (riga 1 = header)
+            for row_idx, group_val in enumerate(df["GROUP"], start=2):
+                if str(group_val).strip().upper() == "CERCHI IN LEGA":
+                    for col_idx in range(1, len(df.columns) + 1):
+                        worksheet.cell(row=row_idx, column=col_idx).fill = yellow_fill
+
+    return output.getvalue()
 
 # === 4. App Streamlit ===
 def main():
