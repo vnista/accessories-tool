@@ -39,14 +39,18 @@ def merge_files_overwrite(df_en: pd.DataFrame, df_master: pd.DataFrame) -> pd.Da
     cols_finali = ["PARTNUMBER", "DESCRIPTION", "REMARK", "GROUP", "MASTER IMAGE", "NOT_FOUND"]
     cols_finali = [c for c in cols_finali if c in merged.columns]
 
-    return merged[cols_finali]
+    result = merged[cols_finali]
+
+    # Applica moltiplicazione x4 per CERCHI IN LEGA
+    result = apply_wheel_price(result)
+
+    return result
 
 
 # === 2b. Funzione pulizia file già in italiano ===
 def process_italian_file(df_it: pd.DataFrame, df_master: pd.DataFrame) -> pd.DataFrame:
-    mandatory = "Listino comprensivo di IVA, montaggio escluso."
+    mandatory = "Listino comprensivo di IVA, montaggio escluso"
 
-    # Aggiunge la frase obbligatoria in fondo a ogni REMARK
     if "REMARK" in df_it.columns:
         df_it["REMARK"] = df_it["REMARK"].fillna("").astype(str).str.strip()
 
@@ -59,17 +63,44 @@ def process_italian_file(df_it: pd.DataFrame, df_master: pd.DataFrame) -> pd.Dat
 
         df_it["REMARK"] = df_it["REMARK"].apply(add_mandatory)
 
-    # Traduce GROUP usando il master IT (fix duplicati PARTNUMBER)
     if "GROUP" in df_it.columns and "PARTNUMBER" in df_it.columns:
         gmap = (
             df_master[["PARTNUMBER", "GROUP"]]
             .dropna(subset=["PARTNUMBER"])
-            .drop_duplicates(subset=["PARTNUMBER"], keep="first")  # ← fix chiave
+            .drop_duplicates(subset=["PARTNUMBER"], keep="first")
             .set_index("PARTNUMBER")["GROUP"]
         )
         df_it["GROUP"] = df_it["PARTNUMBER"].map(gmap).fillna(df_it["GROUP"])
 
+    # Applica moltiplicazione x4 per CERCHI IN LEGA
+    df_it = apply_wheel_price(df_it)
+
     return df_it
+
+
+# === 2c. Moltiplicazione x4 prezzo per CERCHI IN LEGA ===
+def apply_wheel_price(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Per tutte le righe dove GROUP == 'CERCHI IN LEGA',
+    moltiplica il valore della colonna 'PRICE INCL.VAT EUR' per 4.
+    """
+    price_col = "PRICE INCL.VAT EUR"
+
+    # Controlla che esistano entrambe le colonne necessarie
+    if "GROUP" not in df.columns or price_col not in df.columns:
+        return df  # niente da fare, restituisce il df invariato
+
+    # Maschera delle righe CERCHI IN LEGA
+    mask = df["GROUP"].astype(str).str.strip().str.upper() == "CERCHI IN LEGA"
+
+    # Converte la colonna in numerico (per sicurezza, ignora errori)
+    df[price_col] = pd.to_numeric(df[price_col], errors="coerce")
+
+    # Moltiplica x4 solo le righe della maschera
+    df.loc[mask, price_col] = df.loc[mask, price_col] * 4
+
+    return df
+
 
 # === 3. Utility per creare il file Excel da scaricare ===
 def to_excel_download(df: pd.DataFrame) -> bytes:
@@ -108,8 +139,9 @@ def main():
         st.markdown(
             "### Conversione EN → IT\n"
             "Carica il **file master accessori in inglese**.\n\n"
-            "- Le intestazioni devono essere alla **riga 10** (le prime 9 righe vengono ignorate).\n"
-            "- L'app sostituirà con l'italiano le colonne `DESCRIPTION`, `REMARK`, `GROUP` e `MASTER IMAGE`.\n"
+            "- Le intestazioni devono essere alla **riga 10**.\n"
+            "- L'app sostituirà in italiano `DESCRIPTION`, `REMARK`, `GROUP` e `MASTER IMAGE`.\n"
+            "- Le righe con `GROUP = CERCHI IN LEGA` avranno il prezzo (`PRICE INCL.VAT EUR`) **moltiplicato x4**.\n"
             "- L'output conterrà solo: `PARTNUMBER`, `DESCRIPTION`, `REMARK`, `GROUP`, `MASTER IMAGE` "
             "+ colonna di servizio `NOT_FOUND`."
         )
@@ -144,7 +176,14 @@ def main():
 
                 total = len(result)
                 not_found = result["NOT_FOUND"].sum() if "NOT_FOUND" in result.columns else 0
-                st.info(f"Righe totali: {total} – Codici NON trovati nel master IT: {not_found}")
+                wheels = (
+                    result["GROUP"].astype(str).str.strip().str.upper() == "CERCHI IN LEGA"
+                ).sum() if "GROUP" in result.columns else 0
+                st.info(
+                    f"Righe totali: {total} – "
+                    f"Codici NON trovati: {not_found} – "
+                    f"Cerchi in lega (prezzo x4): {wheels}"
+                )
 
                 excel_bytes = to_excel_download(result)
                 st.download_button(
@@ -161,11 +200,10 @@ def main():
         st.markdown(
             "### Pulizia file IT (REMARK + GROUP)\n"
             "Carica un file **già localizzato in italiano**.\n\n"
-            "- Alla colonna `REMARK` verrà aggiunta in fondo la frase obbligatoria: "
-            "`\"Listino comprensivo di IVA, montaggio escluso.\"`.\n"
-            "- La colonna `GROUP` verrà riscritta con le voci italiane del database "
-            "(es. `PACKS` → `PACCHETTI`, `INTERIOR` → `INTERNI`, ecc.).\n"
-            "- L'output avrà la **stessa struttura** del file caricato, con queste due colonne aggiornate."
+            "- Alla colonna `REMARK` verrà aggiunta la frase "
+            "`\"Listino comprensivo di IVA, montaggio escluso\"`.\n"
+            "- La colonna `GROUP` verrà riscritta con le voci italiane del database.\n"
+            "- Le righe con `GROUP = CERCHI IN LEGA` avranno il prezzo (`PRICE INCL.VAT EUR`) **moltiplicato x4**."
         )
 
         uploaded_file_it = st.file_uploader(
@@ -191,8 +229,13 @@ def main():
             if st.button("Esegui pulizia file IT"):
                 result_it = process_italian_file(df_it, df_master)
 
-                st.subheader("Anteprima risultato (REMARK + GROUP aggiornati)")
+                st.subheader("Anteprima risultato (REMARK + GROUP + prezzi cerchi aggiornati)")
                 st.dataframe(result_it.head())
+
+                wheels = (
+                    result_it["GROUP"].astype(str).str.strip().str.upper() == "CERCHI IN LEGA"
+                ).sum() if "GROUP" in result_it.columns else 0
+                st.info(f"Cerchi in lega trovati (prezzo x4 applicato): {wheels}")
 
                 excel_bytes_it = to_excel_download(result_it)
                 st.download_button(
