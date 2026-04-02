@@ -49,7 +49,7 @@ def merge_files_overwrite(df_en: pd.DataFrame, df_master: pd.DataFrame) -> pd.Da
 
 # === 2b. Funzione pulizia file già in italiano ===
 def process_italian_file(df_it: pd.DataFrame, df_master: pd.DataFrame) -> pd.DataFrame:
-    mandatory = "Listino comprensivo di IVA, montaggio escluso"
+    mandatory = "Listino comprensivo di IVA, montaggio escluso."
 
     if "REMARK" in df_it.columns:
         df_it["REMARK"] = df_it["REMARK"].fillna("").astype(str).str.strip()
