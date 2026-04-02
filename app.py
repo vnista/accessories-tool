@@ -234,7 +234,7 @@ def main():
             "### Pulizia file IT (REMARK + GROUP)\n"
             "Carica un file **già localizzato in italiano**.\n\n"
             "- Alla colonna `REMARK` verrà aggiunta la frase "
-            "`\"Listino comprensivo di IVA, montaggio escluso\"`.\n"
+            "`\"Listino comprensivo di IVA, montaggio escluso.\"`.\n"
             "- La colonna `GROUP` verrà riscritta con le voci italiane del database.\n"
             "- Le righe con `GROUP = CERCHI IN LEGA` avranno il prezzo (`PRICE INCL.VAT EUR`) "
             "**moltiplicato x4** ed evidenziate in **giallo**.\n"
